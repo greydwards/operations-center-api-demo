@@ -76,8 +76,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log("[john-deere-auth] Request received");
+    console.log("[john-deere-auth] Method:", req.method);
+    console.log("[john-deere-auth] URL:", req.url);
+
     const authHeader = req.headers.get("Authorization");
+    console.log("[john-deere-auth] Auth header present:", !!authHeader);
+
     if (!authHeader) {
+      console.error("[john-deere-auth] Missing authorization header");
       return new Response(JSON.stringify({ error: "No authorization header" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -86,13 +93,26 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    console.log("[john-deere-auth] Supabase URL:", supabaseUrl);
+    console.log("[john-deere-auth] Service key present:", !!supabaseServiceKey);
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const token = authHeader.replace("Bearer ", "");
+    console.log("[john-deere-auth] Token (first 20 chars):", token.substring(0, 20) + "...");
+
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
+    console.log("[john-deere-auth] User lookup result - error:", userError);
+    console.log("[john-deere-auth] User lookup result - user ID:", user?.id);
+
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid user token" }), {
+      console.error("[john-deere-auth] Invalid JWT - userError:", userError);
+      return new Response(JSON.stringify({
+        error: "Invalid user token",
+        details: userError?.message || "No user found",
+        code: 401
+      }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -102,18 +122,27 @@ Deno.serve(async (req: Request) => {
     const action = url.searchParams.get("action");
 
     if (action === "exchange") {
+      console.log("[john-deere-auth] Action: exchange");
+
       const { code, redirectUri } = await req.json();
+      console.log("[john-deere-auth] Code present:", !!code);
+      console.log("[john-deere-auth] Redirect URI:", redirectUri);
 
       if (!code || !redirectUri) {
+        console.error("[john-deere-auth] Missing code or redirectUri");
         return new Response(JSON.stringify({ error: "Missing code or redirectUri" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      console.log("[john-deere-auth] Calling John Deere token exchange...");
       const tokens = await exchangeCodeForTokens(code, redirectUri);
+      console.log("[john-deere-auth] Token exchange successful");
+
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
+      console.log("[john-deere-auth] Saving to database for user:", user.id);
       const { error: upsertError } = await supabase
         .from("john_deere_connections")
         .upsert({
@@ -125,9 +154,11 @@ Deno.serve(async (req: Request) => {
         }, { onConflict: "user_id" });
 
       if (upsertError) {
+        console.error("[john-deere-auth] Database upsert error:", upsertError);
         throw new Error(`Failed to save tokens: ${upsertError.message}`);
       }
 
+      console.log("[john-deere-auth] Exchange complete");
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
