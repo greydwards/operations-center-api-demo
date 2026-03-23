@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { exchangeCodeForTokens } from '@/lib/john-deere-client';
 import { useAuth } from '@/contexts/auth-context';
-import { Loader2 } from 'lucide-react';
+import { Loader as Loader2 } from 'lucide-react';
 
 export default function CallbackPage() {
   const router = useRouter();
@@ -14,9 +14,14 @@ export default function CallbackPage() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      console.log('[callback] Starting callback handler');
       const code = searchParams.get('code');
       const errorParam = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
+
+      console.log('[callback] Code present:', !!code);
+      console.log('[callback] Error param:', errorParam);
+      console.log('[callback] User:', user?.id);
 
       if (errorParam) {
         setError(errorDescription || errorParam);
@@ -35,10 +40,14 @@ export default function CallbackPage() {
 
       try {
         const redirectUri = `${window.location.origin}/auth/callback`;
+        console.log('[callback] Calling exchangeCodeForTokens...');
         await exchangeCodeForTokens(code, redirectUri);
+        console.log('[callback] Token exchange complete, refreshing connection...');
         await refreshJohnDeereConnection();
+        console.log('[callback] Connection refreshed, redirecting to dashboard');
         router.push('/dashboard');
       } catch (err) {
+        console.error('[callback] Error during callback:', err);
         setError(err instanceof Error ? err.message : 'Failed to connect to John Deere');
       }
     };

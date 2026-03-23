@@ -5,9 +5,11 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
+  console.log('[john-deere-client] Session:', session ? 'exists' : 'null');
   if (!session) {
     throw new Error('Not authenticated');
   }
+  console.log('[john-deere-client] Access token (first 20 chars):', session.access_token.substring(0, 20) + '...');
   return {
     'Authorization': `Bearer ${session.access_token}`,
     'apikey': SUPABASE_ANON_KEY,
@@ -16,19 +18,32 @@ async function getAuthHeaders() {
 }
 
 export async function exchangeCodeForTokens(code: string, redirectUri: string) {
+  console.log('[john-deere-client] Exchanging code for tokens...');
+  console.log('[john-deere-client] Redirect URI:', redirectUri);
+
   const headers = await getAuthHeaders();
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-auth?action=exchange`, {
+  console.log('[john-deere-client] Headers prepared, making request...');
+
+  const url = `${SUPABASE_URL}/functions/v1/john-deere-auth?action=exchange`;
+  console.log('[john-deere-client] URL:', url);
+
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify({ code, redirectUri }),
   });
 
+  console.log('[john-deere-client] Response status:', response.status);
+
   if (!response.ok) {
     const error = await response.json();
+    console.error('[john-deere-client] Error response:', error);
     throw new Error(error.error || 'Failed to exchange code');
   }
 
-  return response.json();
+  const result = await response.json();
+  console.log('[john-deere-client] Exchange successful');
+  return result;
 }
 
 export async function refreshJohnDeereToken() {
