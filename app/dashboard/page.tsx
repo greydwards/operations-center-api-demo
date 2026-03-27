@@ -11,7 +11,7 @@ import { FieldsList } from '@/components/dashboard/fields-list';
 import { FieldFilters } from '@/components/dashboard/field-filters';
 import { HarvestOperations } from '@/components/dashboard/harvest-operations';
 import { IrrigationAnalysis } from '@/components/dashboard/irrigation-analysis';
-import { fetchStoredFields, importFieldsWithBoundaries } from '@/lib/john-deere-client';
+import { fetchStoredFields, importFieldsWithBoundaries, importOperations } from '@/lib/john-deere-client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader as Loader2, LogOut, Tractor, Map, MapPin, Wheat, Droplets, User } from 'lucide-react';
@@ -59,16 +59,31 @@ export default function DashboardPage() {
     setSelectedFarm(null);
   }, [johnDeereConnection?.selected_org_id]);
 
+  const [isSyncingOps, setIsSyncingOps] = useState(false);
+
   const handleImport = async () => {
     setIsImporting(true);
     setFieldsError(null);
     try {
       const data = await importFieldsWithBoundaries();
       setStoredFields(data.fields || []);
+      setRefreshKey((k) => k + 1);
     } catch (err) {
       setFieldsError(err instanceof Error ? err.message : 'Failed to import fields');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleSyncOperations = async () => {
+    setIsSyncingOps(true);
+    try {
+      await importOperations();
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      setFieldsError(err instanceof Error ? err.message : 'Failed to sync operations');
+    } finally {
+      setIsSyncingOps(false);
     }
   };
 

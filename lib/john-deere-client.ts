@@ -120,37 +120,9 @@ export async function fetchFields() {
   return response.json();
 }
 
-export async function fetchHarvestOperations() {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-api?action=harvest-operations`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to fetch harvest operations');
-  }
-
-  return response.json();
-}
-
-export async function fetchSeedingOperations() {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-api?action=seeding-operations`, {
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to fetch seeding operations');
-  }
-
-  return response.json();
-}
-
 export async function importFieldsWithBoundaries() {
   const headers = await getAuthHeaders();
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-api?action=import-fields`, {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-import?action=import-fields`, {
     method: 'POST',
     headers,
   });
@@ -158,6 +130,39 @@ export async function importFieldsWithBoundaries() {
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Failed to import fields');
+  }
+
+  return response.json();
+}
+
+export async function importOperations() {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-import?action=import-operations`, {
+    method: 'POST',
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to import operations');
+  }
+
+  return response.json();
+}
+
+export async function fetchStoredOperations(fieldId?: string, operationType?: string) {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams({ action: 'get-stored-operations' });
+  if (fieldId) params.set('fieldId', fieldId);
+  if (operationType) params.set('operationType', operationType);
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/john-deere-api?${params.toString()}`, {
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to fetch stored operations');
   }
 
   return response.json();

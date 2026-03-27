@@ -374,6 +374,9 @@ verify_jwt = false
 [functions.john-deere-api]
 verify_jwt = false
 
+[functions.john-deere-import]
+verify_jwt = false
+
 [functions.john-deere-irrigation]
 verify_jwt = false
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { fetchIrrigationAnalysis, pollForShapefileUrl, fetchHarvestOperations, fetchSeedingOperations } from '@/lib/john-deere-client';
+import { fetchIrrigationAnalysis, pollForShapefileUrl, fetchStoredOperations } from '@/lib/john-deere-client';
 import { supabase } from '@/lib/supabase';
 import { processShapefile, classifyHarvestPolygons, classifySeedingPolygons, type HarvestZoneStats, type SeedingZoneStats } from '@/lib/shapefile-analysis';
 import { Button } from '@/components/ui/button';
@@ -202,13 +202,15 @@ function OperationSection({
                 <div className="bg-emerald-50 rounded-lg p-3">
                   <p className="text-xs text-emerald-700 font-medium">Irrigated Harvested</p>
                   <p className="text-lg font-bold text-emerald-900">{formatAcres(r.irrigatedHarvestedAcres, preferredUnit)}</p>
-                  {r.irrigatedAvgYield != null && <p className="text-xs text-emerald-600">Avg yield: {r.irrigatedAvgYield.toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>}
+                  {r.irrigatedTotalBushels > 0 && <p className="text-xs text-emerald-600 font-medium">Total: {r.irrigatedTotalBushels.toLocaleString(undefined, { maximumFractionDigits: 0 })} bu</p>}
+                  {r.irrigatedAvgYield != null && <p className="text-xs text-emerald-600">Avg yield: {r.irrigatedAvgYield.toLocaleString(undefined, { maximumFractionDigits: 1 })} bu/ac</p>}
                   {r.irrigatedAvgMoisture != null && <p className="text-xs text-emerald-600">Avg moisture: {r.irrigatedAvgMoisture.toFixed(1)}%</p>}
                 </div>
                 <div className="bg-amber-50 rounded-lg p-3">
                   <p className="text-xs text-amber-700 font-medium">Dryland Harvested</p>
                   <p className="text-lg font-bold text-amber-900">{formatAcres(r.drylandHarvestedAcres, preferredUnit)}</p>
-                  {r.drylandAvgYield != null && <p className="text-xs text-amber-600">Avg yield: {r.drylandAvgYield.toLocaleString(undefined, { maximumFractionDigits: 1 })}</p>}
+                  {r.drylandTotalBushels > 0 && <p className="text-xs text-amber-600 font-medium">Total: {r.drylandTotalBushels.toLocaleString(undefined, { maximumFractionDigits: 0 })} bu</p>}
+                  {r.drylandAvgYield != null && <p className="text-xs text-amber-600">Avg yield: {r.drylandAvgYield.toLocaleString(undefined, { maximumFractionDigits: 1 })} bu/ac</p>}
                   {r.drylandAvgMoisture != null && <p className="text-xs text-amber-600">Avg moisture: {r.drylandAvgMoisture.toFixed(1)}%</p>}
                 </div>
               </div>
@@ -294,17 +296,20 @@ export function IrrigationAnalysis({ fields, preferredUnit }: Props) {
       setOpsLoading(true);
       try {
         const [harvestData, seedingData] = await Promise.all([
-          fetchHarvestOperations().catch(() => ({ values: [] })),
-          fetchSeedingOperations().catch(() => ({ values: [] })),
+          fetchStoredOperations(selectedFieldId, 'harvest').catch(() => ({ operations: [] })),
+          fetchStoredOperations(selectedFieldId, 'seeding').catch(() => ({ operations: [] })),
         ]);
 
-        const flattenOps = (data: { values?: Array<{ fieldId: string; fieldName: string; operations: Array<{ id: string; startDate?: string; crop?: { name: string } }> }> }) =>
-          (data.values || [])
-            .filter((fo) => fo.fieldId === selectedFieldId)
-            .flatMap((fo) => fo.operations.map((op) => ({ ...op, fieldName: fo.fieldName })));
+        const toOpEntry = (ops: Array<{ jd_operation_id: string; start_date?: string | null; crop_name?: string | null }>) =>
+          ops.map((op) => ({
+            id: op.jd_operation_id,
+            startDate: op.start_date || undefined,
+            crop: op.crop_name ? { name: op.crop_name } : undefined,
+            fieldName: '',
+          }));
 
-        setHarvestOps(flattenOps(harvestData));
-        setSeedingOps(flattenOps(seedingData));
+        setHarvestOps(toOpEntry(harvestData.operations || []));
+        setSeedingOps(toOpEntry(seedingData.operations || []));
       } catch (_) {
         // Non-critical
       } finally {
@@ -402,8 +407,8 @@ export function IrrigationAnalysis({ fields, preferredUnit }: Props) {
                 <p className="text-xl font-bold text-slate-900">{formatAcres(analysis.irrigatedAcres + analysis.drylandAcres, preferredUnit)}</p>
                 {analysis.totalArea && (
                   <p className="text-xs text-slate-500 mt-1">
-                    JD reported: {analysis.totalArea.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} {analysis.totalArea.unit}
-                    {analysis.workableArea && ` | Workable: ${analysis.workableArea.value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${analysis.workableArea.unit}`}
+                    JD reported: {formatAcres(convertArea(analysis.totalArea.value, analysis.totalArea.unit, 'ac'), preferredUnit)}
+                    {analysis.workableArea && ` | Workable: ${formatAcres(convertArea(analysis.workableArea.value, analysis.workableArea.unit, 'ac'), preferredUnit)}`}
                   </p>
                 )}
               </div>

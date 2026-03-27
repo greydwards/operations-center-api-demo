@@ -2,45 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchHarvestOperations } from '@/lib/john-deere-client';
+import { fetchStoredOperations } from '@/lib/john-deere-client';
 import { Button } from '@/components/ui/button';
 import { Loader2, Wheat, RefreshCw, Calendar, Droplets } from 'lucide-react';
-
-interface HarvestOperation {
-  id: string;
-  type: string;
-  startDate: string;
-  endDate?: string;
-  crop?: { name: string };
-  variety?: { name: string };
-  harvestMoisture?: number;
-  totalYield?: { value: number; unit: string };
-}
-
-interface FieldOperations {
-  fieldId: string;
-  fieldName: string;
-  operations: HarvestOperation[];
-}
+import type { StoredFieldOperation } from '@/types/john-deere';
 
 export function HarvestOperations() {
   const { johnDeereConnection } = useAuth();
-  const [fieldOperations, setFieldOperations] = useState<FieldOperations[]>([]);
+  const [operations, setOperations] = useState<StoredFieldOperation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (johnDeereConnection?.selected_org_id) {
-      loadHarvestOperations();
+      loadOperations();
     }
   }, [johnDeereConnection?.selected_org_id]);
 
-  const loadHarvestOperations = async () => {
+  const loadOperations = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await fetchHarvestOperations();
-      setFieldOperations(data.values || []);
+      const data = await fetchStoredOperations(undefined, 'harvest');
+      setOperations(data.operations || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load harvest operations');
     } finally {
@@ -48,7 +32,8 @@ export function HarvestOperations() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'Unknown date';
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
         year: 'numeric',
@@ -60,7 +45,16 @@ export function HarvestOperations() {
     }
   };
 
-  const totalOperations = fieldOperations.reduce((sum, fo) => sum + fo.operations.length, 0);
+  // Group by field
+  const fieldGroups = operations.reduce((acc, op) => {
+    const key = op.jd_field_id;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(op);
+    return acc;
+  }, {} as Record<string, StoredFieldOperation[]>);
+
+  const fieldEntries = Object.entries(fieldGroups);
+  const totalOperations = operations.length;
 
   if (!johnDeereConnection?.selected_org_id) {
     return (
@@ -83,20 +77,19 @@ export function HarvestOperations() {
           <div>
             <h3 className="font-semibold text-slate-900">Harvest Operations</h3>
             <p className="text-sm text-slate-500">
-              {totalOperations} operations across {fieldOperations.length} fields
+              {totalOperations} operations across {fieldEntries.length} fields
             </p>
           </div>
         </div>
-        <Button onClick={loadHarvestOperations} variant="outline" size="sm" disabled={isLoading}>
+        <Button onClick={loadOperations} variant="outline" size="sm" disabled={isLoading}>
           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         </Button>
       </div>
 
-      {isLoading && fieldOperations.length === 0 ? (
+      {isLoading && operations.length === 0 ? (
         <div className="p-8 text-center">
           <Loader2 className="w-8 h-8 text-amber-600 animate-spin mx-auto mb-3" />
           <p className="text-slate-500">Loading harvest operations...</p>
-          <p className="text-xs text-slate-400 mt-1">This may take a moment as we fetch data for all fields</p>
         </div>
       ) : error ? (
         <div className="p-6">
@@ -104,64 +97,65 @@ export function HarvestOperations() {
             {error}
           </div>
         </div>
-      ) : fieldOperations.length === 0 || totalOperations === 0 ? (
+      ) : totalOperations === 0 ? (
         <div className="p-8 text-center">
           <Wheat className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500">No harvest operations found</p>
+          <p className="text-slate-500">No harvest operations found. Import fields to sync operations.</p>
         </div>
       ) : (
         <div className="divide-y divide-slate-100">
-          {fieldOperations.map((fo) =>
-            fo.operations.length > 0 ? (
-              <div key={fo.fieldId} className="px-6 py-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="font-medium text-slate-900">{fo.fieldName}</span>
-                  <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                    {fo.operations.length} operation{fo.operations.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {fo.operations.map((op) => (
-                    <div
-                      key={op.id}
-                      className="bg-slate-50 rounded-lg p-4 border border-slate-100"
-                    >
-                      <div className="flex flex-wrap items-center gap-4 text-sm">
-                        {op.crop?.name && (
-                          <div className="flex items-center gap-1.5">
-                            <Wheat className="w-4 h-4 text-amber-600" />
-                            <span className="text-slate-700">{op.crop.name}</span>
-                          </div>
-                        )}
-                        {op.startDate && (
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-4 h-4 text-blue-600" />
-                            <span className="text-slate-700">{formatDate(op.startDate)}</span>
-                          </div>
-                        )}
-                        {op.harvestMoisture !== undefined && (
-                          <div className="flex items-center gap-1.5">
-                            <Droplets className="w-4 h-4 text-cyan-600" />
-                            <span className="text-slate-700">{op.harvestMoisture}% moisture</span>
-                          </div>
-                        )}
-                        {op.totalYield && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-700 font-medium">
-                              {op.totalYield.value.toLocaleString()} {op.totalYield.unit}
-                            </span>
-                          </div>
-                        )}
+          {fieldEntries.map(([fieldId, ops]) => (
+            <div key={fieldId} className="px-6 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="font-medium text-slate-900">{fieldId}</span>
+                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                  {ops.length} operation{ops.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {ops.map((op) => (
+                  <div key={op.id} className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                    <div className="flex flex-wrap items-center gap-4 text-sm">
+                      {op.crop_name && (
+                        <div className="flex items-center gap-1.5">
+                          <Wheat className="w-4 h-4 text-amber-600" />
+                          <span className="text-slate-700">{op.crop_name}</span>
+                        </div>
+                      )}
+                      {op.crop_season && (
+                        <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded">
+                          {op.crop_season}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4 text-blue-600" />
+                        <span className="text-slate-700">{formatDate(op.start_date)}</span>
                       </div>
-                      {op.variety?.name && (
-                        <p className="text-xs text-slate-500 mt-2">Variety: {op.variety.name}</p>
+                      {op.avg_moisture != null && (
+                        <div className="flex items-center gap-1.5">
+                          <Droplets className="w-4 h-4 text-cyan-600" />
+                          <span className="text-slate-700">{op.avg_moisture.toFixed(1)}% moisture</span>
+                        </div>
+                      )}
+                      {op.avg_yield_value != null && (
+                        <span className="text-slate-700 font-medium">
+                          Avg yield: {op.avg_yield_value.toLocaleString(undefined, { maximumFractionDigits: 2 })} {op.avg_yield_unit || ''}
+                        </span>
+                      )}
+                      {op.area_value != null && (
+                        <span className="text-slate-500">
+                          {op.area_value.toLocaleString(undefined, { maximumFractionDigits: 1 })} {op.area_unit || ''}
+                        </span>
                       )}
                     </div>
-                  ))}
-                </div>
+                    {op.variety_name && op.variety_name !== '---' && (
+                      <p className="text-xs text-slate-500 mt-2">Variety: {op.variety_name}</p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : null
-          )}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -109,6 +109,32 @@ export interface ImportFieldsResponse {
   withoutBoundaries: number;
 }
 
+export interface StoredFieldOperation {
+  id: string;
+  user_id: string;
+  org_id: string;
+  jd_field_id: string;
+  jd_operation_id: string;
+  operation_type: string;
+  crop_season: string | null;
+  crop_name: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  variety_name: string | null;
+  machine_name: string | null;
+  machine_vin: string | null;
+  area_value: number | null;
+  area_unit: string | null;
+  avg_yield_value: number | null;
+  avg_yield_unit: string | null;
+  avg_moisture: number | null;
+  total_wet_mass_value: number | null;
+  total_wet_mass_unit: string | null;
+  imported_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface JohnDeereTokenResponse {
   access_token: string;
   refresh_token: string;
